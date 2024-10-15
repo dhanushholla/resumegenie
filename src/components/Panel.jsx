@@ -199,7 +199,7 @@ const Panel = () => {
 
         setLoading(true);
         try {
-            const prompt = `Group and categorize each and every aspect of the resume details into a suitable JSON structure based on the following resume:\n\n${resumeData} and each experience should also contain skillset but not categories, also keep a special note that while categorizing the skillset entry individually(outside experience) .. try to group them under respective fields like programming languages,databases,frontend,backend,databases etc.. provide Only high quality json structure as response, must also have the contact and personal infos mentioned and don't provide unnecessary field explanations`;
+            const prompt = `Group and categorize each and every aspect of the resume details into a suitable JSON structure based on the following resume:\n\n${resumeData} and each experience should also contain skillset but not categories, also keep a special note that while categorizing the skillset entry individually(outside experience) .. try to group them under respective fields like programming languages,databases,frontend,backend,databases etc.. provide Only high quality json structure as response`;
             const result = await model.generateContent([prompt]);
             // console.log(result.response.text());
             setJsonPreview(result.response.text());
