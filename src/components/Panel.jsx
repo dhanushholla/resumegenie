@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import mammoth from 'mammoth';
+import pdfToText from 'react-pdftotext';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -32,7 +33,7 @@ const Panel = () => {
         };
 
         initializeGenerativeAI();
-        toast('Welcome to ResumeGenie v1.0! Currently supporting .docx,.txt file formats');
+        toast('Welcome to ResumeGenie v1.0! Currently supporting .docx,.txt,.pdf file formats');
         toast('Try out Querying,summarizing,JD profile Matching with your resume!')
     }, []);
 
@@ -72,7 +73,7 @@ const Panel = () => {
             // Determine file type and extract content
             const fileType = file.type;
             if (fileType === 'application/pdf') {
-                resumeText = await extractTextFromPDF(content);
+                resumeText = await extractTextFromPDF(file);
             } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
                 resumeText = await extractTextFromDOCX(content);
             } else if (fileType === 'text/plain') {
@@ -93,19 +94,21 @@ const Panel = () => {
         toast('Resume Uploaded!')
     };
 
-    const extractTextFromPDF = async (content) => {
-        const pdfData = new Uint8Array(content);
-        const pdf = await pdfjsLib.getDocument(pdfData).promise;
-        const numPages = pdf.numPages;
-        let textContent = '';
 
-        for (let i = 1; i <= numPages; i++) {
-            const page = await pdf.getPage(i);
-            const text = await page.getTextContent();
-            textContent += text.items.map(item => item.str).join(' ') + '\n';
-        }
-        return textContent;
-    };
+    const extractTextFromPDF = async (fileC)=>{
+        // console.log(fileC);
+        let res = pdfToText(fileC)
+                .then((text) => {
+                    // console.log('pdf context',text)
+                    return text;
+                })
+                .catch((err) => {
+                    toast('Issue with processing PDF file 🙁, please try again later!')
+                    return 'pdf data retrieval Error'
+                });
+        return res;
+       
+    }
 
     const extractTextFromDOCX = async (content) => {
         const arrayBuffer = new Uint8Array(content);
@@ -232,7 +235,7 @@ const Panel = () => {
                 <span className='text-gray-600'>{`(ℹ️  Upload resume and start experimenting! 😎)`}</span>
                 <input
                     type="file"
-                    accept=".docx,.txt"
+                    accept=".docx,.txt,.pdf"
                     onChange={handleFileChange}
                     className="mb-4 border border-gray-300 p-2 rounded w-full"
                     ref={fileref}
