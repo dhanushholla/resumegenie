@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import mammoth from 'mammoth';
 import pdfToText from 'react-pdftotext';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf';
@@ -16,7 +16,6 @@ const Panel = () => {
     const [JDanswer, setJDAnswer] = useState('');
     const [jsonPreview, setJsonPreview] = useState('');
     const [generativeAI, setGenerativeAI] = useState(null);
-    const [model, setModel] = useState(null);
     const [loading, setLoading] = useState(false);
     const [flag, setFlag] = useState(false);
     const [uploadToggle, setToggle] = useState(false);
@@ -25,11 +24,15 @@ const Panel = () => {
 
     useEffect(() => {
         const initializeGenerativeAI = async () => {
-            const apiKey = import.meta.env.VITE_APIKEY;
-            const aiInstance = new GoogleGenerativeAI(apiKey);
-            const generativeModel = aiInstance.getGenerativeModel({ model: "gemini-1.5-flash" });
-            setGenerativeAI(aiInstance);
-            setModel(generativeModel);
+            try {
+                const apiKey = import.meta.env.VITE_APIKEY;
+                const ai = new GoogleGenAI({ apiKey });
+                setGenerativeAI(ai);
+                console.log('AI initialized successfully with new GoogleGenAI');
+            } catch (error) {
+                console.error('Error initializing AI:', error);
+                toast.error('Failed to initialize AI. Please check your API key and try again.');
+            }
         };
 
         initializeGenerativeAI();
@@ -68,68 +71,79 @@ const Panel = () => {
         
         const fileReader = new FileReader();
         fileReader.onload = async (e) => {
-            const content = e.target.result;
+            try {
+                const content = e.target.result;
 
-            // Determine file type and extract content
-            const fileType = file.type;
-            if (fileType === 'application/pdf') {
-                resumeText = await extractTextFromPDF(file);
-            } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                resumeText = await extractTextFromDOCX(content);
-            } else if (fileType === 'text/plain') {
-                resumeText = content; // For plain text
-            } else {
-                console.error('Unsupported file type');
+                // Determine file type and extract content
+                const fileType = file.type;
+                if (fileType === 'application/pdf') {
+                    resumeText = await extractTextFromPDF(file);
+                } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                    resumeText = await extractTextFromDOCX(content);
+                } else if (fileType === 'text/plain') {
+                    resumeText = content; // For plain text
+                } else {
+                    console.error('Unsupported file type');
+                    toast.error('Unsupported file type');
+                    setLoading(false);
+                    return;
+                }
+
+                setResumeData(resumeText);
+                await parseResume(resumeText);
+                setFlag(true);
+                toast.success('Resume Uploaded!');
+            } catch (error) {
+                console.error('Error processing file:', error);
+                toast.error('Error processing file. Please try again.');
+            } finally {
                 setLoading(false);
-                return;
             }
-
-            setResumeData(resumeText);
-            await parseResume(resumeText);
-            setFlag(true);
-            setLoading(false);
         };
 
         fileReader.readAsArrayBuffer(file);
-        toast('Resume Uploaded!')
     };
 
-
     const extractTextFromPDF = async (fileC)=>{
-        // console.log(fileC);
-        let res = pdfToText(fileC)
-                .then((text) => {
-                    // console.log('pdf context',text)
-                    return text;
-                })
-                .catch((err) => {
-                    toast('Issue with processing PDF file 🙁, please try again later!')
-                    return 'pdf data retrieval Error'
-                });
-        return res;
-       
+        try {
+            let res = await pdfToText(fileC);
+            return res;
+        } catch (err) {
+            console.error('PDF processing error:', err);
+            toast.error('Issue with processing PDF file 🙁, please try again later!');
+            return 'pdf data retrieval Error';
+        }
     }
 
     const extractTextFromDOCX = async (content) => {
-        const arrayBuffer = new Uint8Array(content);
-        const { value: text } = await mammoth.extractRawText({ arrayBuffer });
-        return text;
+        try {
+            const arrayBuffer = new Uint8Array(content);
+            const { value: text } = await mammoth.extractRawText({ arrayBuffer });
+            return text;
+        } catch (error) {
+            console.error('DOCX processing error:', error);
+            toast.error('Error processing DOCX file');
+            throw error;
+        }
     };
 
     const parseResume = async (resumeText) => {
-        if (!model) return;
+        if (!generativeAI) return;
 
         try {
-            const prompt = `Extract key information from the following resume:\n\n${resumeText}`;
-            const result = await model.generateContent([prompt]);
-            // console.log('Parsed Resume Response:', result);
+            const response = await generativeAI.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: `Extract key information from the following resume:\n\n${resumeText}`
+            });
+            console.log('Resume parsed successfully');
         } catch (error) {
             console.error('Error parsing resume:', error);
+            toast.error('Error parsing resume with AI');
         }
     };
 
     const handleJDChat = async () => {
-        if (!model) return;
+        if (!generativeAI) return;
         setLoading(true)
         try {
             const prompt =`
@@ -148,68 +162,84 @@ const Panel = () => {
                     { "name": "category name", "rating": ratingcount },
                     etc....
                 ]`
-            const result = await model.generateContent([prompt]);
-            setJDAnswer(result.response.text());
-            let res = scrapeJDData(result.response.text());
+            const response = await generativeAI.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: prompt
+            });
+            setJDAnswer(response.text);
+            let res = scrapeJDData(response.text);
             setskillsData(res)
         } catch (error) {
-            console.error('Error in chat:', error);
+            console.error('Error in JD chat:', error);
+            toast.error('Error processing JD analysis');
         }finally {
             setLoading(false);
         }
     };
 
     const handleChat = async () => {
-        if (!model) return;
+        if (!generativeAI) return;
         setLoading(true)
         try {
             const prompt = `As an experienced recruiter, answer the following question based on this resume data:\n\n${resumeData}\n\nQuestion: ${question}, in response, if anything asked irrelavant or out of scope then said it is not in scope and say try to ask question related to this resume and insist that strictly`;
-            const result = await model.generateContent([prompt]);
-            setAnswer(result.response.text());
+            const response = await generativeAI.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: prompt
+            });
+            setAnswer(response.text);
         } catch (error) {
             console.error('Error in chat:', error);
+            toast.error('Error processing query');
         }finally {
             setLoading(false);
         }
     };
+    
     const summarize = async () => {
-        if (!model) return;
+        if (!generativeAI) return;
         setLoading(true);
         try {
             const prompt = `As an experienced recruiter and content curator, answer the following question based on this resume data:\n\n${resumeData}\n\n Question: summarize the whole resume with necessary key details under 250 words with all sections in an ATS parsable rich text content`;
-            const result = await model.generateContent([prompt]);
-            toast('Summarized!')
-            setAnswer(result.response.text());
+            const response = await generativeAI.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: prompt
+            });
+            toast.success('Summarized!');
+            setAnswer(response.text);
         } catch (error) {
-            console.error('Error in chat:', error);
-        }
-        finally {
+            console.error('Error in summarization:', error);
+            toast.error('Error generating summary');
+        } finally {
             setLoading(false);
         }
     };
 
     const copyResult = () =>{
         window.navigator.clipboard.writeText(answer);
-        toast('Result Copied!')
+        toast.success('Result Copied!')
     }
+    
     const copyJDResult = () =>{
         window.navigator.clipboard.writeText(JDanswer);
-        toast(' JD Report Copied!')
+        toast.success('JD Report Copied!')
     }
 
     const extractJsonFormat = async () => {
-        if (!model || !resumeData) return;
+        if (!generativeAI || !resumeData) return;
 
         setLoading(true);
         try {
             const prompt = `Group and categorize each and every aspect of the resume details into a suitable JSON structure based on the following resume:\n\n${resumeData} and each experience should also contain skillset but not categories, also keep a special note that while categorizing the skillset entry individually(outside experience) .. try to group them under respective fields like programming languages,databases,frontend,backend,databases etc.. provide Only high quality json structure as response`;
-            const result = await model.generateContent([prompt]);
-            // console.log(result.response.text());
-            setJsonPreview(result.response.text());
-            window.navigator.clipboard.writeText(result.response.text());
-            toast('JSON Copied!')
+            const response = await generativeAI.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: prompt
+            });
+            setJsonPreview(response.text);
+            window.navigator.clipboard.writeText(response.text);
+            toast.success('JSON Copied!');
         } catch (error) {
             console.error('Error extracting JSON format:', error);
+            toast.error('Error generating JSON format');
         } finally {
             setLoading(false);
         }
