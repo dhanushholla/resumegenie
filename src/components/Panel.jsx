@@ -199,7 +199,7 @@ const Panel = () => {
         if (!generativeAI) return;
         setLoading(true);
         try {
-            const prompt = `As an experienced recruiter and content curator, answer the following question based on this resume data:\n\n${resumeData}\n\n Question: summarize the whole resume with necessary key details under 250 words with all sections in an ATS parsable rich text content`;
+            const prompt = `As an experienced recruiter and content curator, answer the following question based on this resume data:\n\n${resumeData}\n\n Question: summarize the whole resume with necessary key details under 250 words with all sections in an ATS parsable text content (preferably plain text)`;
             const response = await generativeAI.models.generateContent({
                 model: "gemini-2.0-flash",
                 contents: prompt
